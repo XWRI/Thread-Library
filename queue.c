@@ -4,26 +4,26 @@
 
 #include "queue.h"
 
-struct queueNode
+struct queue_node
 {
     void* data;
-    struct queueNode* next;
-    struct queueNode* prev;
+    struct queue_node* next;
+    struct queue_node* prev;
 };
 
-typedef struct queueNode* queueNode_t;
+typedef struct queue_node* queue_node_t;
 
 struct queue
 {
-    struct queueNode* front;
-    struct queueNode* back;
+    struct queue_node* front;
+    struct queue_node* back;
     int size;
 };
 
-// creates a new queueNode and set its data
-struct queueNode* create_queueNode(void* data)
+// creates a new queue_node and set its data
+struct queue_node* create_queue_node(void* data)
 {
-    queueNode_t node = (queueNode_t)malloc(sizeof(struct queueNode));
+    queue_node_t node = (queue_node_t)malloc(sizeof(struct queue_node));
     node->data = data;
     node->next = NULL;
     node->prev = NULL;
@@ -33,11 +33,11 @@ struct queueNode* create_queueNode(void* data)
 // creates the queue and initialize the front and back and size
 queue_t queue_create(void)
 {
-    queue_t curQueue = (queue_t)malloc(sizeof(struct queue));
-    curQueue->front = NULL;
-    curQueue->back = NULL;
-    curQueue->size = 0;
-    return curQueue;
+    queue_t cur_queue = (queue_t)malloc(sizeof(struct queue));
+    cur_queue->front = NULL;
+    cur_queue->back = NULL;
+    cur_queue->size = 0;
+    return cur_queue;
 }
 
 // frees the queue
@@ -51,11 +51,11 @@ int queue_destroy(queue_t queue)
     return 0;
 }
 
-// creates a new queueNode with the data provided and put it at the end of the
+// creates a new queue_node with the data provided and put it at the end of the
 // queue
 int queue_enqueue(queue_t queue, void *data)
 {
-    queueNode_t node = create_queueNode(data);
+    queue_node_t node = create_queue_node(data);
     if(node == NULL || data == NULL || queue == NULL) return -1;
 
     if(queue->front == NULL || queue->back == NULL)
@@ -64,16 +64,16 @@ int queue_enqueue(queue_t queue, void *data)
     }
     else
     {
-        queueNode_t tempNode = queue->back;
-        node->prev = tempNode;
-        tempNode->next = node;
+        queue_node_t temp_node = queue->back;
+        node->prev = temp_node;
+        temp_node->next = node;
     }
     queue->back = node;
     queue->size += 1;
     return 0;
 }
 
-// dequeues a queueNode from the front of the queue and stores the data item to
+// dequeues a queue_node from the front of the queue and stores the data item to
 // @void** data
 int queue_dequeue(queue_t queue, void **data)
 {
@@ -82,7 +82,7 @@ int queue_dequeue(queue_t queue, void **data)
         return -1;
     }
 
-    queueNode_t popNode = queue->front;
+    queue_node_t popNode = queue->front;
     *data = popNode->data;
 
     if(queue->front->next == NULL)
@@ -101,36 +101,36 @@ int queue_dequeue(queue_t queue, void **data)
     return 0;
 }
 
-// iterates through the queue and deletes the first queueNode that contains
+// iterates through the queue and deletes the first queue_node that contains
 // @void *data
 int queue_delete(queue_t queue, void *data)
 {
     if(data == NULL || queue == NULL || queue->front == NULL) return -1;
 
-    queueNode_t curNode = queue->front;
-    while(curNode != NULL )
+    queue_node_t cur_node = queue->front;
+    while(cur_node != NULL )
     {
-        if(curNode->data == data)
+        if(cur_node->data == data)
         {
             if(queue->front->data == data)
             {
-              queueNode_t tempNode = curNode->next;
+              queue_node_t temp_node = cur_node->next;
               free(queue->front);
-              queue->front = tempNode;
-              tempNode = NULL;
+              queue->front = temp_node;
+              temp_node = NULL;
             }
             else
             {
-              curNode->prev->next = curNode->next;
-              curNode->next->prev = curNode->prev;
-              curNode->prev= NULL;
-              curNode->next = NULL;
-              free(curNode);
+              cur_node->prev->next = cur_node->next;
+              cur_node->next->prev = cur_node->prev;
+              cur_node->prev= NULL;
+              cur_node->next = NULL;
+              free(cur_node);
             }
             queue->size -= 1;
             return 0;
         }
-        curNode = curNode->next;
+        cur_node = cur_node->next;
     }
 
     return -1;  //did not find the node
@@ -142,15 +142,15 @@ int queue_iterate(queue_t queue, queue_func_t func, void *arg, void **data)
 {
     if(queue == NULL || queue->front == NULL || func == NULL) return -1;
 
-    queueNode_t curNode = queue->front;
-    while(curNode != NULL)
+    queue_node_t cur_node = queue->front;
+    while(cur_node != NULL)
     {
-        if(func(curNode->data, arg) == 1)
+        if(func(cur_node->data, arg) == 1)
         {
-          if(data != NULL) *data = curNode->data;
+          if(data != NULL) *data = cur_node->data;
           return 0;
         }
-        curNode = curNode->next;
+        cur_node = cur_node->next;
     }
     return 0;
 }
