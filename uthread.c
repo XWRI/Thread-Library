@@ -28,6 +28,7 @@ uthread_t init_tid = 0;  // initial number for the thread identifier
 queue_t ready;
 queue_t running;
 queue_t zombie;
+queue_t blocked;
 
 void uthread_yield(void)
 {
@@ -59,6 +60,7 @@ int uthread_init()
     ready = queue_create();
     running = queue_create();
     zombie = queue_create();
+    blocked = queue_create();
     initialize = true;
 
     uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(uthread));
@@ -105,7 +107,17 @@ int uthread_create(uthread_func_t func, void *arg)
 
 void uthread_exit(int retval)
 {
-	/* TODO Phase 2 */
+	 uthread_job_t running_thread;
+   queue_dequeue(running, (void**)running_thread);
+   running_thread->ret_val = retval;
+   queue_enqueue(zombie, (void*)running_thread);
+
+   // need to find the threads that the exiting thread is blocking and add it
+   // to ready queue_enqueue
+
+   // do a context switch
+   }
+
 }
 
 int uthread_join(uthread_t tid, int *retval)
