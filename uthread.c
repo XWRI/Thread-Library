@@ -30,6 +30,13 @@ queue_t running;
 queue_t zombie;
 queue_t blocked;
 
+// helper Function to find the
+int find_blocked(void *data, void *arg) {
+  uthread_job_t cur_thread = (uthread_job_t)data;
+  if(cur_thread->tid == (uthread_t)arg) return 1;
+  return 0;
+}
+
 void uthread_yield(void)
 {
     if(queue_length(ready) == 0) return;
@@ -114,14 +121,19 @@ void uthread_exit(int retval)
 
    // need to find the threads that the exiting thread is blocking and add it
    // to ready queue_enqueue
+   queue_iterate(blocked, find_blocked, (void*)&running_thread->tid, &blocked_thread);
 
+   if(blocked_thread != NULL) queue_enqueue(ready, (void*)blocked_thread);
    // do a context switch
-   }
-
+   uthread_job_t new_running_thread = (uthread_job_t)malloc(sizeof(uthread));
+   queue_dequeue(ready, (void*)new_running_thread);
+   queue_enqueue(running, (void*)new_running_thread);
+   uthread_ctx_switch(new_running_thread->context, running_thread->context);
 }
 
 int uthread_join(uthread_t tid, int *retval)
 {
-	/* TODO Phase 2 */
+	if(queue_length(ready) == 0) return 0;
+  else uthread_yield();
 	/* TODO Phase 3 */
 }
