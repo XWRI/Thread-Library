@@ -3,7 +3,8 @@
 programs := \
 	queue_tester.x \
 	uthread_hello.x \
-	uthread_yield.x
+	uthread_yield.x \
+	test_preempt.x
 
 ## *** IMPORTANT *** ##
 ##	You should NOT have to modify anything below
@@ -79,4 +80,3 @@ clean:
 	$(Q)rm -rf $(objs) $(deps) $(programs)
 
 .PHONY: clean $(libuthread)
-

@@ -3,7 +3,7 @@ lib := libuthread.a
 objs := queue.o context.o uthread.o preempt.o
 #executable :=
 CC := gcc
-CFLAGS	:= -Wall -Werror
+CFLAGS	:= -Wall -Wextra -Werror
 CFLAGS	+= -g
 
 # Generate dependencies

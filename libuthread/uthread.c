@@ -10,7 +10,7 @@
 #include <ucontext.h>
 
 #include "context.h"
-// #include "preempt.h"
+#include "preempt.h"
 #include "queue.h"
 #include "uthread.h"
 
@@ -47,7 +47,6 @@ int find_joined(void *data, void *arg) {
   uthread_job_t thread = (uthread_job_t)data;
   if(thread->tid == *(uthread_t*)arg && thread->joined == true)
   {
-    printf("%d\n", thread->joined == true);
     return 1;
   }
   return 0;
@@ -70,9 +69,11 @@ uthread_t uthread_self(void)
 {
   if(queue_length(running) == 0) return 0;
 
+  preempt_disable();
   uthread_job_t cur_thread = NULL;
   queue_dequeue(running, (void**)(&cur_thread));
   queue_enqueue(running, (void*)cur_thread);
+  preempt_enable();
   return cur_thread->tid;
 }
 
@@ -87,7 +88,11 @@ int uthread_init()
 
   uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(struct uthread));
 
-  if(cur_thread == NULL) return -1;
+  if(cur_thread == NULL)
+  {
+    preempt_enable();
+    return -1;
+  }
 
   cur_thread->tid =  init_tid++;
   cur_thread->stack = uthread_ctx_alloc_stack();
@@ -95,6 +100,7 @@ int uthread_init()
   cur_thread->blocking_thread = -1;
 
   queue_enqueue(running, (void*)cur_thread);
+  preempt_start();
 
   return 0;
 }
@@ -109,8 +115,12 @@ int uthread_create(uthread_func_t func, void *arg)
   uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(struct uthread));
 
   // In case of memory allocation failure
-  if(cur_thread == NULL) return -1;
-
+  if(cur_thread == NULL)
+  {
+  preempt_enable();
+    return -1;
+  }
+  preempt_disable();
   // Sets the properties of the current thread
   cur_thread->tid = init_tid++;
   cur_thread->funct = func;
@@ -125,57 +135,74 @@ int uthread_create(uthread_func_t func, void *arg)
   if(uthread_ctx_init(&cur_thread->context, cur_thread->stack,
     cur_thread->funct, cur_thread->arg) != 0)
   {
+    preempt_enable();
     return -1;
   }
   queue_enqueue(ready, (void*)cur_thread);
+  preempt_enable();
   return cur_thread->tid;
 }
 
 void uthread_exit(int retval)
 {
+  preempt_disable();
   uthread_job_t running_thread = (uthread_job_t)malloc(sizeof(struct uthread));
   queue_dequeue(running, (void**)(&running_thread));
   running_thread->ret_val = retval;
   queue_enqueue(zombie, (void*)running_thread);
 
- // need to find the threads that the exiting thread is blocking and add it
- // to ready queue_enqueue
- uthread_job_t blocked_thread = NULL;
- queue_iterate(blocked, find_tid, (void*)&running_thread->blocking_thread,
-   (void**)&blocked_thread);
+  // need to find the threads that the exiting thread is blocking and add it
+  // to ready queue_enqueue
+  uthread_job_t blocked_thread = NULL;
+  queue_iterate(blocked, find_tid, (void*)&running_thread->blocking_thread,
+    (void**)&blocked_thread);
 
- if(blocked_thread != NULL)
- {
-   blocked_thread->ret_val = retval;
-   queue_delete(blocked, (void*)blocked_thread);
-   queue_enqueue(ready, (void*)blocked_thread);
-   running_thread->blocking_thread = -1;
- }
- // do a context switch
- uthread_job_t new_running_thread = (uthread_job_t)malloc(sizeof(struct uthread));
- queue_dequeue(ready, (void**)(&new_running_thread));
- queue_enqueue(running, (void*)new_running_thread);
- uthread_ctx_switch(&running_thread->context, &new_running_thread->context);
+  if(blocked_thread != NULL)
+  {
+    blocked_thread->ret_val = retval;
+    queue_delete(blocked, (void*)blocked_thread);
+    queue_enqueue(ready, (void*)blocked_thread);
+    running_thread->blocking_thread = -1;
+  }
+  // do a context switch
+  uthread_job_t new_running_thread = (uthread_job_t)malloc(sizeof(struct uthread));
+  queue_dequeue(ready, (void**)(&new_running_thread));
+  queue_enqueue(running, (void*)new_running_thread);
+  uthread_ctx_switch(&running_thread->context, &new_running_thread->context);
+  preempt_enable();
 }
 
 int uthread_join(uthread_t tid, int *retval)
 {
   // if the joining thread is the main thread
-  if(tid == 0) return -1;
+  if(tid == 0)
+  {
+    preempt_enable();
+    return -1;
+  }
 
   // if the @tid is the TID of the calling thread
   uthread_job_t parent_thread = (uthread_job_t)malloc(sizeof(struct uthread));
+  preempt_disable();
   queue_dequeue(running, (void**)(&parent_thread));
 
-  if(parent_thread->tid == tid) return -1;
-  //
+  if(parent_thread->tid == tid)
+  {
+    preempt_enable();
+    return -1;
+  }
+
   uthread_job_t ready_child = NULL;
   uthread_job_t zombie_child = NULL;
   queue_iterate(ready, find_joined, (void*)&tid, (void**)&ready_child);
   queue_iterate(zombie, find_joined, (void*)&tid, (void**)&zombie_child);
 
   //if the @tid is already being joined
-  if(ready_child != NULL || zombie_child != NULL) return -1;
+  if(ready_child != NULL || zombie_child != NULL)
+  {
+    preempt_enable();
+    return -1;
+  }
 
   queue_iterate(ready, find_tid, (void*)&tid, (void**)&ready_child);
 
@@ -196,7 +223,7 @@ int uthread_join(uthread_t tid, int *retval)
         ready_child->joined = true;
         queue_enqueue(running, (void*)ready_child);
         uthread_ctx_switch(&parent_thread->context, &ready_child->context);
-        retval = &(ready_child->ret_val);
+        if(retval != NULL) *retval = ready_child->ret_val;
         break;
       }
       else
@@ -210,7 +237,7 @@ int uthread_join(uthread_t tid, int *retval)
   // if T2 is already dead
   if(zombie_child != NULL)
   {
-    retval = &zombie_child->ret_val;
+    if(retval != NULL) *retval = zombie_child->ret_val;
     queue_delete(zombie, (void*)zombie_child);
     uthread_ctx_destroy_stack(zombie_child->stack);
     free(zombie_child);
@@ -218,7 +245,9 @@ int uthread_join(uthread_t tid, int *retval)
   // if uthread @tid cannot be found
   else
   {
+    preempt_enable();
     return -1;
   }
+  preempt_enable();
   return 0;
 }
