@@ -4,10 +4,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <sys/time.h>
+#include <limits.h>
+#include <ucontext.h>
 
 #include "context.h"
-#include "preempt.h"
+// #include "preempt.h"
 #include "queue.h"
 #include "uthread.h"
 
@@ -33,7 +36,7 @@ queue_t blocked;
 // helper Function to find the
 int find_blocked(void *data, void *arg) {
   uthread_job_t cur_thread = (uthread_job_t)data;
-  if(cur_thread->tid == (uthread_t)arg) return 1;
+  if(cur_thread->tid == *(uthread_t*)arg) return 1;
   return 0;
 }
 
@@ -41,12 +44,11 @@ void uthread_yield(void)
 {
     if(queue_length(ready) == 0) return;
 
-    uthread_job_t new_thread = (uthread_job_t)malloc(sizeof(uthread));
-    uthread_job_t running_thread = (uthread_job_t)malloc(sizeof(uthread));
-    queue_dequeue(ready, (void**)(new_thread));
-    queue_dequeue(running, (void**)(running_thread));
+    uthread_job_t new_thread = (uthread_job_t)malloc(sizeof(struct uthread));
+    uthread_job_t running_thread = (uthread_job_t)malloc(sizeof(struct uthread));
+    queue_dequeue(ready, (void**)(&new_thread));
+    queue_dequeue(running, (void**)(&running_thread));
     queue_enqueue(running, (void*)new_thread);
-
     queue_enqueue(ready,(void*)running_thread);
     uthread_ctx_switch(&running_thread->context, &new_thread->context);
 }
@@ -55,8 +57,8 @@ uthread_t uthread_self(void)
 {
   if(queue_length(running) == 0) return 0;
 
-  uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(uthread));
-  queue_dequeue(running, (void**)cur_thread);
+  uthread_job_t cur_thread = NULL;
+  queue_dequeue(running, (void**)(&cur_thread));
   queue_enqueue(running, (void*)cur_thread);
   return cur_thread->tid;
 }
@@ -70,14 +72,14 @@ int uthread_init()
     blocked = queue_create();
     initialize = true;
 
-    uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(uthread));
+    uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(struct uthread));
 
     if(cur_thread == NULL) return -1;
 
     cur_thread->tid =  init_tid++;
     cur_thread->stack = uthread_ctx_alloc_stack();
 
-    queue_enqueue(running, cur_thread);
+    queue_enqueue(running, (void*)cur_thread);
 
     return 0;
 }
@@ -89,7 +91,7 @@ int uthread_create(uthread_func_t func, void *arg)
        uthread_init();
     }
 
-    uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(uthread));
+    uthread_job_t cur_thread = (uthread_job_t)malloc(sizeof(struct uthread));
 
     // In case of memory allocation failure
     if(cur_thread == NULL) return -1;
@@ -103,7 +105,7 @@ int uthread_create(uthread_func_t func, void *arg)
     // In case of memory failure
     if(cur_thread->stack == NULL) return -1;
 
-    if(uthread_ctx_init(cur_thread->context, cur_thread->stack,
+    if(uthread_ctx_init(&cur_thread->context, cur_thread->stack,
         cur_thread->funct, cur_thread->arg) != 0)
     {
       return -1;
@@ -114,26 +116,30 @@ int uthread_create(uthread_func_t func, void *arg)
 
 void uthread_exit(int retval)
 {
-	 uthread_job_t running_thread;
-   queue_dequeue(running, (void**)running_thread);
+	 uthread_job_t running_thread = (uthread_job_t)malloc(sizeof(struct uthread));
+   queue_dequeue(running, (void**)(&running_thread));
    running_thread->ret_val = retval;
    queue_enqueue(zombie, (void*)running_thread);
 
    // need to find the threads that the exiting thread is blocking and add it
    // to ready queue_enqueue
-   queue_iterate(blocked, find_blocked, (void*)&running_thread->tid, &blocked_thread);
+   uthread_job_t blocked_thread = NULL;
+   queue_iterate(blocked, find_blocked, (void*)&running_thread->tid, (void**)&blocked_thread);
 
-   if(blocked_thread != NULL) queue_enqueue(ready, (void*)blocked_thread);
+   if(blocked_thread != NULL)
+   {
+      queue_delete(blocked, (void*)blocked_thread);
+      queue_enqueue(ready, (void*)blocked_thread);
+   }
    // do a context switch
-   uthread_job_t new_running_thread = (uthread_job_t)malloc(sizeof(uthread));
-   queue_dequeue(ready, (void*)new_running_thread);
+   uthread_job_t new_running_thread = (uthread_job_t)malloc(sizeof(struct uthread));
+   queue_dequeue(ready, (void**)(&new_running_thread));
    queue_enqueue(running, (void*)new_running_thread);
-   uthread_ctx_switch(new_running_thread->context, running_thread->context);
+   uthread_ctx_switch(&running_thread->context, &new_running_thread->context);
 }
 
 int uthread_join(uthread_t tid, int *retval)
 {
-	if(queue_length(ready) == 0) return 0;
-  else uthread_yield();
-	/* TODO Phase 3 */
+
 }
+
