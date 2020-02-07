@@ -37,6 +37,8 @@ void handler(void)
 void preempt_start(void)
 {
   struct itimerval t;
+  // sigemptyset(&sig.sa_mask);
+  // sigaddset(&sig.sa_mask, SIGVTALRM);
   preempt_enable();
   sig.sa_handler = (__sighandler_t)handler;
   sigaction(SIGVTALRM, &sig, NULL);

@@ -58,11 +58,13 @@ void uthread_yield(void)
 
   uthread_job_t new_thread = (uthread_job_t)malloc(sizeof(struct uthread));
   uthread_job_t running_thread = (uthread_job_t)malloc(sizeof(struct uthread));
+  preempt_disable();
   queue_dequeue(ready, (void**)(&new_thread));
   queue_dequeue(running, (void**)(&running_thread));
   queue_enqueue(running, (void*)new_thread);
   queue_enqueue(ready,(void*)running_thread);
   uthread_ctx_switch(&running_thread->context, &new_thread->context);
+  preempt_enable();
 }
 
 uthread_t uthread_self(void)
